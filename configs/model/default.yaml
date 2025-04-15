@@ -1,0 +1,21 @@
+transformer:
+  dim_channel: 7
+  dim_token: 1024
+  nhead: 8
+  dim_feedforward: 2048
+  num_layers: 10
+  dropout: 0.0
+  norm_first: False
+
+preprocess:
+  scheme: scale_to_eps
+  eps: 1e-4
+
+type: crop
+demo_num: 10
+patch_num_in: 8
+patch_num_out: 8
+patch_resolution: 16
+
+use_patch_pos_encoding: True
+use_func_pos_encoding: True

@@ -1,0 +1,47 @@
+defaults:
+  - datasets: default
+  - model: default
+  - loss: default
+  - opt: default
+  - rollout: default
+  - _self_
+  - override hydra/hydra_logging: none
+  - override hydra/job_logging: none
+
+
+
+# Static flags
+board: False
+plot: True
+deterministic: True
+amp: 0
+dump_dir: "/s1/shared/ICON_RESULTS/train/"
+project: "train"
+train_seed: 42
+test_seed: 84
+rollout_seed: 168
+profile_level: 0
+data_cross_batch: "no"
+dataset_workers: 0
+restore_dir: null
+restore_step: 1000000
+trainable_mode: "all"
+epochs: 20
+steps_per_epoch: 10000
+loss_freq: 1000
+save_freq: 100000
+plot_freq: 10000
+time_freq: 1000
+time_warm: 100
+plot_num: null
+
+multi_gpu: 0
+
+wandb:
+  project: "train"
+
+
+hydra:  
+  output_subdir: null
+  run:  
+    dir: .

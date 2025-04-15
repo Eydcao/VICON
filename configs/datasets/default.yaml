@@ -1,0 +1,33 @@
+num_samples_max: -1
+delta_t_range: [1, 5]
+usevort: true
+usegrid: false
+demo_num: 10
+split_scheme: split
+crop_len_in: 64
+crop_len_out: 16
+monotonic: true
+rotate_flip: none
+
+train_batch_size: 64
+test_batch_size: ${.train_batch_size}
+
+types:
+  COMPRESSIBLE2D:
+    folder: ../icon-data/2D_Train_Rand/
+    pad_mode: periodic
+    train_batch_size: ${...train_batch_size}
+    test_batch_size: ${...test_batch_size}
+    c_mask: [1, 1, 1, 1, 0, 0, 0]
+  EULER2D:
+    folder: ../icon-data/2D_Train_Turb/
+    pad_mode: periodic
+    train_batch_size: ${...train_batch_size}
+    test_batch_size: ${...test_batch_size}
+    c_mask: [1, 1, 1, 1, 0, 0, 0]
+  NS2D:
+    folder: ../icon-data/NavierStokes-2D-conditoned/
+    pad_mode: padding
+    train_batch_size: ${...train_batch_size}
+    test_batch_size: ${...test_batch_size}
+    c_mask: [0, 1, 1, 0, 0, 1, 0]
