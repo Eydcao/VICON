@@ -1,53 +1,53 @@
 # VICON: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics
 
-This repository contains the official implementation of [VICON: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics](https://arxiv.org/abs/2411.16063).
+This repository contains the official implementation of [VICON](https://arxiv.org/abs/2411.16063): Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics.
 
 ## Dataset
 
-We evaluated VICON on three fluid dynamics datasets:
+VICON was evaluated on three fluid dynamics datasets:
 
 - PDEArena-Incomp (incompressible Navier-Stokes)
 - PDEBench-Comp-HighVis (compressible Navier-Stokes)
-- PDEBench-Comp-LowVis (compressible NS with numerical-zero viscosity)
+- PDEBench-Comp-LowVis (compressible Navier-Stokes with numerical-zero viscosity)
 
-Please refer to [dataset_prepare/README.md](./dataset_prepare/README.md) for details.
+Refer to [dataset_prepare/README.md](./dataset_prepare/README.md) for details.
 
 ## Usage
 
-We use Hydra for configuration management, which allows flexible parameter modifications through command line or config files. Here's an example command:
+We use Hydra for configuration management, allowing flexible parameter modifications via command line or config files. Example:
 
 ```sh
 # Train the model with specific configurations
-# Assume you are using GPUs 0 and 1, enable wandb logging
-# TODO define your dataset directories either in script or in the config file
+# Assuming GPUs 0 and 1, enable wandb logging
+# TODO: Define your dataset directories either in script or config file
 CUDA_VISIBLE_DEVICES="0,1" python src/train.py plot=0 board=1 amp=0 dataset_workers=2 multi_gpu=1 datasets.train_batch_size=30 loss.min_ex=5 model.transformer.num_layers=10 model.use_patch_pos_encoding=True model.use_func_pos_encoding=True datasets.types.COMPRESSIBLE2D.folder=$COMPRESSIBLE2D_DIR datasets.types.EULER2D.folder=$EULER2D_DIR datasets.types.NS2D.folder=$NS2D_DIR
 ```
 
-For detailed configuration options, please refer to the configs folder.
+Refer to the configs folder for detailed configuration options.
 
 ## Motivations
 
-Current approaches to operator learning of PDEs face distinct challenges that limit their practical applications:
+Current approaches to operator learning of PDEs face challenges limiting practical applications:
 
 1. **Single Operator Learning**
    - Requires complete retraining when equation type or parameters change
-   - Impractical for real-world deployment where system conditions can vary
+   - Impractical for real-world deployment where system conditions vary
 
 2. **Pretrain-Finetune Approach**
    - Can handle multiple PDE types during pretraining
    - Still requires substantial data collection (hundreds of frames/trajectories) for finetuning
-   - Challenging in downstream applications, such as model-based control, with limited data availability, eg online environments
+   - Challenging in downstream applications with limited data availability, e.g., online environments
 
 ### The ICON Innovation and Its Limitations
 
-[ICON (Yang et al, 24)](https://www.pnas.org/doi/10.1073/pnas.2310142120) introduced a novel perspective with inspirations from in-context learning in LLMs:
+[ICON (Yang et al, 24)](https://www.pnas.org/doi/10.1073/pnas.2310142120) introduced a novel perspective inspired by in-context learning in LLMs:
 
-- Defines physical fields (before/after certain timestep) as query/answer (or, COND/QoI, Condition/Quantity of Interest) pairs
+- Defines physical fields (before/after certain timestep) as query/answer (or COND/QoI) pairs
 - Extracts dynamics directly from a few pairs without requiring finetuning
 
-However, ICON faces a significant architectural limitation:
+However, ICON faces an architectural limitation:
 
-- Processes entire discretized physical fields as an individual query/answer
+- Processes entire discretized physical fields as individual query/answer
 - Results in extremely long transformer sequences
 - Becomes computationally infeasible for real-scale, high-dimensional data
 
@@ -61,10 +61,10 @@ However, ICON faces a significant architectural limitation:
 
 Figure 1: Schematic overview of VICON architecture.
 
-Drawing inspiration from Vision Transformers (ViT), which efficiently handle large images by processing them in patches, we developed VICON to overcome these limitations while maintaining the benefits of in-context learning. Our contributions include:
+Inspired by Vision Transformers (ViT), which efficiently handle large images by processing them in patches, VICON overcomes these limitations while maintaining the benefits of in-context learning. Our contributions include:
 
 1. First implementation of in-context learning for 2D PDEs without requiring explicit PDE information
-2. State-of-the-art emperical results compared to existing methods (to the date of the development of VICON)
+2. State-of-the-art empirical results compared to existing methods (at the time of VICON's development)
 3. Flexible rollout capabilities through learning to extract dynamics from pairs with varying timestep sizes
 
 ## Method
@@ -98,7 +98,7 @@ VICON's unique training approach enables versatile rollout schemes:
 - Allows a single trained model to:
   * Extract dynamics at different time scales
   * Perform rollouts with various timestep strides
-  * Potentially reduce the number of rollout steps when appropriate, hence, 
+  * Potentially reduce the number of rollout steps when appropriate, hence,
   * Minimize error accumulation in long-term predictions
 
 <div style="display:flex; flex-direction:row;">
