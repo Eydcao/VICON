@@ -1,6 +1,12 @@
 # VICON: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics
 
-This repository contains the official implementation of [VICON](https://arxiv.org/abs/2411.16063): Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics.
+This repository contains the official implementation of VICON: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics, published in [Transactions on Machine Learning Research (TMLR)](https://openreview.net/forum?id=6V3YmHULQ3).
+
+[[Paper]](https://openreview.net/forum?id=6V3YmHULQ3) [[arXiv]](https://arxiv.org/abs/2411.16063)
+
+## Updates
+
+- **[Jan 2026]** VICON has been accepted by TMLR! The accepted paper is available on [OpenReview](https://openreview.net/forum?id=6V3YmHULQ3).
 
 ## Dataset
 
@@ -64,7 +70,7 @@ Figure 1: Schematic overview of VICON architecture.
 Inspired by Vision Transformers (ViT), which efficiently handle large images by processing them in patches, VICON overcomes these limitations while maintaining the benefits of in-context learning. Our contributions include:
 
 1. First implementation of in-context learning for 2D PDEs without requiring explicit PDE information
-2. State-of-the-art empirical results compared to existing methods (at the time of VICON's development)
+2. State-of-the-art empirical results compared to existing methods
 3. Flexible rollout capabilities through learning to extract dynamics from pairs with varying timestep sizes
 
 ## Method
@@ -98,8 +104,7 @@ VICON's unique training approach enables versatile rollout schemes:
 - Allows a single trained model to:
   * Extract dynamics at different time scales
   * Perform rollouts with various timestep strides
-  * Potentially reduce the number of rollout steps when appropriate, hence,
-  * Minimize error accumulation in long-term predictions
+  * Potentially reduce the number of rollout steps when appropriate, minimizing error accumulation in long-term predictions
 
 <div style="display:flex; flex-direction:row;">
     <figure style="text-align: left; margin: 0;">
@@ -120,10 +125,11 @@ Figure 2: VICON's flexible rollout strategy: Starting with timestep dt=1, the mo
 - 3x faster inference time
 
 <div>
-    <figure style="display: flex; flex-direction: column; align-items: flex; margin: 0;">
+    <figure style="display: flex; flex-direction: column; align-items: flex-start; margin: 0;">
         <img src="./figs/tke.png" width="500px"/>
     </figure>
 </div>
+
 
 Figure 3: Comparison of turbulence kinetic energy predictions: VICON demonstrates superior accuracy over MPP in both RMSE metrics and advanced physical statistics.
 
@@ -146,11 +152,15 @@ Figure 4: Comparison with state-of-the-art performance. VICON is additionally ev
 ## Citation
 
 ```bibtex
-@article{cao2024vicon,
-  title={VICON: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics Prediction},
-  author={Cao, Yadi and Liu, Yuxuan and Yang, Liu and Yu, Rose and Schaeffer, Hayden and Osher, Stanley},
-  journal={arXiv preprint arXiv:2411.16063},
-  year={2024}
+@article{
+cao2026vicon,
+title={{VICON}: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics Prediction},
+author={Yadi Cao and Yuxuan Liu and Liu Yang and Rose Yu and Hayden Schaeffer and Stanley Osher},
+journal={Transactions on Machine Learning Research},
+issn={2835-8856},
+year={2026},
+url={https://openreview.net/forum?id=6V3YmHULQ3},
+note={}
 }
 ```
 
