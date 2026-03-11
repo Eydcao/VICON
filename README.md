@@ -16,9 +16,12 @@
 git clone https://github.com/Eydcao/VICON.git
 cd VICON
 
-# Create conda environment
+# Create conda environment (installs Python + Poetry)
 conda env create -f environment.yml
 conda activate vicon
+
+# Install dependencies via Poetry
+poetry install
 ```
 
 ## Pre-trained Checkpoints
