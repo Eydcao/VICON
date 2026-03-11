@@ -1,11 +1,8 @@
 # VICON: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch 2.3+](https://img.shields.io/badge/PyTorch-2.3+-ee4c2c.svg)](https://pytorch.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![TMLR](https://img.shields.io/badge/TMLR-2026-blue.svg)](https://openreview.net/forum?id=6V3YmHULQ3)
 [![arXiv](https://img.shields.io/badge/arXiv-2411.16063-b31b1b.svg)](https://arxiv.org/abs/2411.16063)
-
-[[Paper]](https://openreview.net/forum?id=6V3YmHULQ3) | [[arXiv]](https://arxiv.org/abs/2411.16063) | [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Checkpoint-orange)](https://huggingface.co/PLACEHOLDER)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Checkpoint-orange)](https://huggingface.co/PLACEHOLDER)
 
 > **VICON: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics Prediction**
 > Published in **Transactions on Machine Learning Research (TMLR)**
