@@ -2,7 +2,7 @@
 
 [![TMLR](https://img.shields.io/badge/TMLR-2026-blue.svg)](https://openreview.net/forum?id=6V3YmHULQ3)
 [![arXiv](https://img.shields.io/badge/arXiv-2411.16063-b31b1b.svg)](https://arxiv.org/abs/2411.16063)
-[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Checkpoint-orange)](https://huggingface.co/PLACEHOLDER)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Checkpoint-orange)](https://huggingface.co/felix-lyx/vicon)
 
 ## Updates
 
@@ -28,7 +28,7 @@ poetry install --no-root
 
 | Model | Dataset | Download |
 |-------|---------|----------|
-| VICON | Combined (All 3 PDEs) | [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Download-orange)](https://huggingface.co/PLACEHOLDER) |
+| VICON | Combined (All 3 PDEs) | [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Download-orange)](https://huggingface.co/felix-lyx/vicon) |
 
 ## Dataset
 
