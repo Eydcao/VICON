@@ -21,7 +21,7 @@ conda env create -f environment.yml
 conda activate vicon
 
 # Install dependencies via Poetry
-poetry install
+poetry install --no-root
 ```
 
 ## Pre-trained Checkpoints
