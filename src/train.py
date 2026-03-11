@@ -33,16 +33,9 @@ def run_train(cfg):
             config=OmegaConf.to_container(cfg, resolve=True),
         )
 
-    # Creation of instances
-    # create model
-    if cfg.model.type == "crop":
-        model = models.ICON_CROPPED(cfg.model)
-        print("Using cropped (new) model")
-    elif cfg.model.type == "nocrop":
-        model = models.ICON_UNCROPPED(cfg.model)
-        print("Using uncropped (ancient) model")
-    else:
-        raise ValueError("Unknown model type: {}".format(cfg.model.type))
+    # Creation of model instance
+    model = models.ICON_UNCROPPED(cfg.model)
+    print("Using VICON model")
 
     # create dataset
     train_datasets = all_datasets(cfg.datasets, cfg.dataset_workers, cfg.train_seed, "train")
@@ -55,7 +48,7 @@ def run_train(cfg):
     # create data loaders
     train_loaders = {
         k: torch.utils.data.DataLoader(
-            v,
+            v.cycle(),
             batch_size=cfg.datasets.types[k].train_batch_size,
             num_workers=cfg.dataset_workers,
             pin_memory=True,
@@ -64,7 +57,7 @@ def run_train(cfg):
     }
     test_loaders = {
         k: torch.utils.data.DataLoader(
-            v,
+            v.cycle(),
             batch_size=cfg.datasets.types[k].test_batch_size,
             # num_workers=cfg.dataset_workers,
             num_workers=1,
@@ -123,7 +116,7 @@ def run_train(cfg):
             or (trainer.train_step % (cfg.plot_freq // 10) == 0 and trainer.train_step <= cfg.plot_freq)
             or (trainer.train_step % (cfg.plot_freq // 10) == 0 and trainer.train_step >= total_steps - cfg.plot_freq)
         ):
-            # NOTE since node bs represent different pde types, we can only plot more than 1 type TODO
+            # Plot each dataset type separately (batch contains mixed PDE types)
             for tmp_type, looper in test_loopers.items():
                 tmp_types, tmp_pairs, tmp_in_idx, tmp_out_idx, _ = next(looper)
                 eval_plot(tmp_types, trainer, tmp_pairs, f"test_{tmp_type}", tmp_in_idx, tmp_out_idx, 0, cfg)

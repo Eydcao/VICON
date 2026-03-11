@@ -1,18 +1,54 @@
-**/.DS_Store
-**/*.pyc
-useless/*
-**/results*/*
-**/*log
-**/check_points*/*
-**/*checkpoints/*
-**/*pickle
-**/*tfrecord
-**/*play*
-**/*pdf
-**/*png
-**/wandb/*
-**/ckpts/*
-**/tmp/*
-**/res/*
-**/*.csv
-**/*.npz
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.venv/
+env/
+venv/
+
+# Data and checkpoints
+*.pth
+*.h5
+*.hdf5
+*.tfrecord
+*.pickle
+
+# Logs and results
+logs/
+wandb/
+outputs/
+results*/
+ckpts/
+checkpoints/
+*.log
+
+# Temporary files
+tmp/
+*.tmp
+
+# Generated files
+*.csv
+*.npz
+
+# Dependencies (optional - remove if you want to track lock files)
+poetry.lock
+
+# Keep figs/ directory (figures are needed for README)
+# !figs/

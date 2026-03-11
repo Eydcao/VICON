@@ -1,9 +1,12 @@
 ckpt_dir: '/s1/shared/ICON_RESULTS/train/20240712-115012/'
 ckpt_stamp: '200000_params'
-gt_ref_steps: 5
+gt_ref_steps: 10
 demo_num: 9
 strategy: 'fixed_single_step'
+max_stride: 1
 save: 0
+dropped: False
+batch_size: 1  # Number of trajectories to process in parallel during rollout
 error:
-  scheme: scale_by_size
-  eps: 1e-8
+  scheme: scale_by_std
+  eps: 1e-4
