@@ -11,7 +11,7 @@ preprocess:
   scheme: scale_to_eps
   eps: 1e-4
 
-type: crop
+type: nocrop
 demo_num: 10
 patch_num_in: 8
 patch_num_out: 8

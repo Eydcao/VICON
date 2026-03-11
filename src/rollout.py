@@ -11,7 +11,7 @@ from dataset import all_datasets
 import models
 from trainer import Trainer
 from datetime import datetime
-from rollout_utils import rollout_one_traj, restore_model, plot_traj
+from rollout_utils import rollout_one_traj, rollout_batch_trajs, restore_model, plot_traj
 from rollout_strategy import gen_strategy_list, print_strategy
 from tqdm import tqdm
 
@@ -41,11 +41,11 @@ def get_error(residuals, tar, error_cfg):
     return error
 
 
-def save_results(results, ground_truth, folder, name):
+def save_results(results, ground_truth, folder, name, err=0):
     # results: [t, c, h, w], ground_truth: [t, c, h, w]
     # save as npz
     os.makedirs(f"./results_rollout/{folder}", exist_ok=True)
-    np.savez(f"./results_rollout/{folder}/{name}.npz", results=results, ground_truth=ground_truth)
+    np.savez(f"./results_rollout/{folder}/{name}.npz", results=results, ground_truth=ground_truth, err=err)
 
 
 @torch.no_grad()
@@ -65,28 +65,25 @@ def run_rollout(cfg):
     else:
         wandb_run = None
 
-    # Creation of instances
-    if cfg.model.type == "crop":
-        model = models.ICON_CROPPED(cfg.model)
-        print("Using cropped (new) model")
-    elif cfg.model.type == "nocrop":
-        model = models.ICON_UNCROPPED(cfg.model)
-        print("Using uncropped (ancient) model")
-    else:
-        raise ValueError("Unknown model type: {}".format(cfg.model.type))
+    # Creation of model instance
+    model = models.ICON_UNCROPPED(cfg.model)
+    print("Using VICON model")
 
     # create model
     # ckpt_path = f"{FLAGS.ckpt_dir}/{FLAGS.ckpt_stamp}.pth"
     ckpt_path = os.path.join(cfg.rollout.ckpt_dir, cfg.rollout.ckpt_stamp + ".pth")
     restore_model(model, ckpt_path)
     # create dataset
-    rollout_datasets = all_datasets(cfg.datasets, 0, cfg.rollout_seed, "rollout")
+    rollout_datasets = all_datasets(cfg.datasets, 0, cfg.rollout_seed, "rollout", cfg.rollout)
 
-    # create trainer
-    trainer = Trainer(model, cfg.model, cfg.opt, cfg.loss, trainable_mode=cfg.trainable_mode, amp=cfg.amp)
     # create data loaders
+    batch_size = cfg.rollout.batch_size
+    # create trainer - enable multi_gpu if batch_size > 1 to utilize all GPUs
+    use_multi_gpu = batch_size > 1 and torch.cuda.device_count() > 1
+    trainer = Trainer(model, cfg.model, cfg.opt, cfg.loss, trainable_mode=cfg.trainable_mode, amp=cfg.amp, multi_gpu=use_multi_gpu)
+    print(f"Rollout batch size: {batch_size}")
     rollout_loaders = {
-        k: torch.utils.data.DataLoader(v, batch_size=1, num_workers=0, pin_memory=True)
+        k: torch.utils.data.DataLoader(v, batch_size=batch_size, num_workers=0, pin_memory=True)
         for k, v in rollout_datasets.items()
     }
 
@@ -100,78 +97,154 @@ def run_rollout(cfg):
 
     # Iterate through data
     for dataset_type, rollout_loader in rollout_loaders.items():
-        # # For test only remove later NOTE
-        batch_cnt = 0
+        traj_cnt = 0  # count individual trajectories processed
+        batch_cnt = 0  # count batches processed
         errors_per_type = []
         for batch in tqdm(rollout_loader):
             batch_cnt += 1
             # if batch_cnt > 2:  # For test only remove later NOTE
             #     break
-            # b_traj: [bs=1, t, c, h, w]
-            # b_c_mask: [bs, c]
-            _, b_traj, b_c_mask = batch
-            # # to device
+
+            # Check if we're using dropped frames
+            if cfg.rollout.dropped:
+                # b_traj: [bs=1, t, c, h, w]
+                # dropped_mask: [bs=1, t]
+                # b_c_mask: [bs, c]
+                _, b_traj, dropped_mask, b_c_mask = batch
+                dropped_mask = dropped_mask[0].to(trainer.device)  # [t]
+            else:
+                # b_traj: [bs=1, t, c, h, w]
+                # b_c_mask: [bs, c]
+                _, b_traj, b_c_mask = batch
+                dropped_mask = None
+
+            current_batch_size = b_traj.shape[0]
+            # to device
             b_traj = b_traj.to(trainer.device)
             b_c_mask = b_c_mask.to(trainer.device)
-            # [t, c, h, w]
-            full_frame = b_traj[0]  # [t, c, h, w]
-            c_mask = b_c_mask[0]
 
-            # Generate strategy list
-            T_len = full_frame.shape[0]
+            # Generate strategy list (same for all trajectories in batch)
+            T_len = b_traj.shape[1]
             gt_ref_steps = cfg.rollout.gt_ref_steps
-            strategy_list = gen_strategy_list(cfg.rollout, T_len)
 
-            # Prepare the pred results, while the first gt_ref_steps+1 are the same as the full_frame
-            results = full_frame.new_zeros(full_frame.shape)
-            results[:gt_ref_steps, ...] = full_frame[:gt_ref_steps, ...]
+            # Modify strategy generation to account for dropped frames
+            strategy_list = gen_strategy_list(cfg.rollout, T_len, dropped_mask)
 
-            # Rollout
-            results = rollout_one_traj(
-                trainer, dataset_type, cfg, results, c_mask, tc_rng, strategy_list
-            )  # [t, c, h, w]
+            if cfg.rollout.dropped:
+                (strategy_list, accumulated_indices) = strategy_list
+                effective_indices = [i for i in accumulated_indices if i >= gt_ref_steps]
+                # sort
+                effective_indices.sort()
+                if len(effective_indices) == 0:
+                    raise ValueError("No effective prediction found for a file.")
 
-            # Compute the mean squared error for the current trajectory
-            # [t,c,h,w] -> [t, c]
+            if batch_size > 1:
+                # Batched rollout: process all trajectories in batch simultaneously
+                # Prepare the pred results for all trajectories in batch
+                results_batch = b_traj.new_zeros(b_traj.shape)  # [bs, t, c, h, w]
+                results_batch[:, :gt_ref_steps, ...] = b_traj[:, :gt_ref_steps, ...]
 
-            traj_error = get_error(full_frame - results, full_frame, cfg.rollout.error)  # [t, c]
+                # Rollout all trajectories in parallel
+                results_batch = rollout_batch_trajs(
+                    trainer, cfg, results_batch, b_c_mask, strategy_list
+                )  # [bs, t, c, h, w]
 
-            # get meaningful channel in traj_error only
-            valid_c_idx = torch.where(c_mask == 1)[0]
-            traj_error = traj_error[:, valid_c_idx]
-            # get temporal idx after gt_ref_steps + 1 only, as previous frames are given
-            traj_error = traj_error[gt_ref_steps:, :]  # [t, c]
+                # Process each trajectory in the batch for error computation
+                for i in range(current_batch_size):
+                    traj_cnt += 1
+                    full_frame = b_traj[i]  # [t, c, h, w]
+                    results = results_batch[i]  # [t, c, h, w]
+                    c_mask = b_c_mask[i]
 
-            errors_per_type.append(traj_error)
+                    # Compute the error for this trajectory
+                    traj_error = get_error(full_frame - results, full_frame, cfg.rollout.error)  # [t, c]
+                    valid_c_idx = torch.where(c_mask == 1)[0]
+                    traj_error = traj_error[:, valid_c_idx]
+                    traj_error = traj_error[gt_ref_steps:, :]  # [t, c]
+                    errors_per_type.append(traj_error)
 
-            if batch_cnt <= cfg.rollout.save:  # if save > 0, save the results and early stop
-                save_results(
-                    results.numpy(force=True),
-                    full_frame.numpy(force=True),
-                    folder=f"{cfg.rollout.ckpt_dir.split('/')[-1]}_{cfg.rollout.strategy}",
-                    name=f"{dataset_type}_case{batch_cnt}",
-                )
-                if batch_cnt == cfg.rollout.save:
-                    break  # only eval and save the first cfg.rollout.save trajectories
+                    if traj_cnt <= cfg.rollout.save and cfg.rollout.save > 0:
+                        save_results(
+                            results.numpy(force=True),
+                            full_frame.numpy(force=True),
+                            err=traj_error.mean().item(),
+                            folder=f"{cfg.rollout.ckpt_dir.split('/')[-1]}_{cfg.rollout.strategy}",
+                            name=f"{dataset_type}_case{traj_cnt}",
+                        )
 
-            if batch_cnt <= 2:  # only plot the first 2 trajectories
-                print("")
-                print(dataset_type)
-                print("strategy_list:")
-                print_strategy(strategy_list)
-                print("valid c idx:", valid_c_idx)
-                print("pred traj error shape:", traj_error.shape)
+                    if traj_cnt <= 2:  # only print/plot for first 2 trajectories
+                        print("")
+                        print(dataset_type)
+                        print("strategy_list:")
+                        print_strategy(strategy_list)
+                        print("valid c idx:", valid_c_idx)
+                        print("pred traj error shape:", traj_error.shape)
 
-                if cfg.rollout.save <= 0:  # if save > 0, skip plotting, since we already saved the results
-                    plot_traj(
-                        f"case{batch_cnt}",
-                        dataset_type,
+                        if cfg.rollout.save <= 0:
+                            plot_traj(
+                                f"case{traj_cnt}",
+                                dataset_type,
+                                results.numpy(force=True),
+                                full_frame.numpy(force=True),
+                                wandb_run,
+                                local=False,
+                                upload=cfg.board,
+                            )
+
+                if cfg.rollout.save > 0 and traj_cnt >= cfg.rollout.save:
+                    break  # stop after saving requested number of trajectories
+
+            else:
+                # Original single-trajectory rollout (batch_size=1)
+                traj_cnt += 1
+                full_frame = b_traj[0]  # [t, c, h, w]
+                c_mask = b_c_mask[0]
+
+                # Prepare the pred results
+                results = full_frame.new_zeros(full_frame.shape)
+                results[:gt_ref_steps, ...] = full_frame[:gt_ref_steps, ...]
+
+                # Rollout
+                results = rollout_one_traj(
+                    trainer, dataset_type, cfg, results, c_mask, tc_rng, strategy_list
+                )  # [t, c, h, w]
+
+                # Compute the mean squared error for the current trajectory
+                traj_error = get_error(full_frame - results, full_frame, cfg.rollout.error)  # [t, c]
+                valid_c_idx = torch.where(c_mask == 1)[0]
+                traj_error = traj_error[:, valid_c_idx]
+                traj_error = traj_error[gt_ref_steps:, :]  # [t, c]
+                errors_per_type.append(traj_error)
+
+                if traj_cnt <= cfg.rollout.save and cfg.rollout.save > 0:
+                    save_results(
                         results.numpy(force=True),
                         full_frame.numpy(force=True),
-                        wandb_run,
-                        local=False,
-                        upload=cfg.board,
+                        err=traj_error.mean().item(),
+                        folder=f"{cfg.rollout.ckpt_dir.split('/')[-1]}_{cfg.rollout.strategy}",
+                        name=f"{dataset_type}_case{traj_cnt}",
                     )
+                    if traj_cnt == cfg.rollout.save:
+                        break
+
+                if traj_cnt <= 2:  # only plot the first 2 trajectories
+                    print("")
+                    print(dataset_type)
+                    print("strategy_list:")
+                    print_strategy(strategy_list)
+                    print("valid c idx:", valid_c_idx)
+                    print("pred traj error shape:", traj_error.shape)
+
+                    if cfg.rollout.save <= 0:
+                        plot_traj(
+                            f"case{traj_cnt}",
+                            dataset_type,
+                            results.numpy(force=True),
+                            full_frame.numpy(force=True),
+                            wandb_run,
+                            local=False,
+                            upload=cfg.board,
+                        )
 
         errors_all[dataset_type] = torch.stack(errors_per_type)  # [dataset_size, t, c]
 

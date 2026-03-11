@@ -1,9 +1,14 @@
 import torch
+import functools
+from typing import Optional
+from torch.utils.data import Dataset, IterableDataset, DataLoader
 import os
 import glob
 import h5py
 import numpy as np
-from torch.utils.data import IterDataPipe
+import torch.nn.functional as F
+import torchdata.datapipes as dp
+import math
 from dataset_utils import crop_split_data, split_data
 from crop_utils import NODE_TYPE
 
@@ -65,7 +70,7 @@ def _get_all_in_one_path(type_cfg, mode):
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
-    return file_list
+    return list(sorted(file_list))
 
 
 def _get_nested_path(type_cfg, mode):
@@ -78,14 +83,13 @@ def _get_nested_path(type_cfg, mode):
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
-    return file_list
+    return list(sorted(file_list))
 
 
-class datasetBase(IterDataPipe):
+class datasetBase(dp.iter.IterDataPipe):
     """
     Base class for all iterable datasets, and contains some shared helper methods.
-
-    In children's __init__, at least need to initialize: train, epoch, cfg, rng, type_label, dp(file list)
+    Added support for dropped frames during rollout.
     """
 
     def _hash(self, list, base):
@@ -145,7 +149,7 @@ class datasetBase(IterDataPipe):
         print("Please implement this method: _proc_data in children class")
         raise NotImplementedError
 
-    def __init__(self, cfg, num_workers, base_seed=1, mode="train"):
+    def __init__(self, cfg, num_workers, base_seed=1, mode="train", rollout_cfg=None):
         # NOTE: must set data_type in children's __init__ then call super().__init__ to init the base class
         self.cfg = cfg
         self.num_workers = num_workers
@@ -156,6 +160,9 @@ class datasetBase(IterDataPipe):
         self.limit_trajectories = cfg.num_samples_max
         self.rng = None
         self.tc_rng = None
+
+        # Check if we're using dropped frames in rollout mode
+        self.dropped_frames = rollout_cfg.dropped
 
         split_scheme = cfg.split_scheme
         if mode == "rollout":
@@ -172,7 +179,7 @@ class datasetBase(IterDataPipe):
         # get the sub path list for each worker
         worker_id, worker_info = self._get_worker_id_and_info()
         worker_paths = self._get_nested_paths()[worker_id]
-        if self.rng is not None:
+        if (self.mode != "test") and self.rng is not None:
             self.rng.shuffle(worker_paths)
 
         for path in worker_paths:
@@ -192,27 +199,21 @@ class datasetBase(IterDataPipe):
                 chunk_size = num_trajs
             # select the chunk of data for each worker
             traj_ids = np.arange(num_trajs, dtype=int)
-            if self.rng is not None:
+            if (self.mode != "test") and self.rng is not None:
                 self.rng.shuffle(traj_ids)
             worker_chunk_ids = traj_ids[:chunk_size]
 
             for idx in worker_chunk_ids:
-                # 3. proc data before augmentation (such as cropping, rotation and flipping), case by case
-                cur_data = self._proc_data(data, idx)
-
                 # 3.5 get c_mask
                 c_mask = torch.tensor(np.array(self.cfg.types[self.data_type].c_mask), dtype=torch.float32)
 
-                # 4. augmentation of data, common
-                # # merge model_cfg and type_cfg into a temp cfg, used in crop and split later
-                # temp_cfg = self.cfg.copy()
-                # # temp_cfg.update(self.mode_cfgs)
-                # type_cfg = temp_cfg.types[self.data_type]
+                # 3. proc data before augmentation (such as cropping, rotation and flipping), case by case
+                if self.rollout and self.dropped_frames:
+                    cur_data, dropped_mask = self._proc_data(data, idx)
+                else:
+                    cur_data = self._proc_data(data, idx)
 
-                # print("self.cfg", self.cfg)
-                # print("type_cfg", type_cfg)
-                # exit(1)
-                # temp_cfg.update(type_cfg)
+                # 4. augmentation of data, common
                 if not self.rollout:
                     cur_data, pairs, t_in, t_out, delta_t = _augment_data(
                         cur_data,
@@ -228,15 +229,22 @@ class datasetBase(IterDataPipe):
                     # NOTE cannot yield cur_data due to different shape
                     yield self.data_type, pairs, t_in, t_out, delta_t
                 else:
-                    # do not augment
-                    yield (self.data_type, cur_data, c_mask)
+                    if self.dropped_frames:
+                        yield (self.data_type, cur_data, dropped_mask, c_mask)
+                    else:
+                        yield (self.data_type, cur_data, c_mask)
 
 
 class NS2DDataset(datasetBase):
+    """
+    Dataset Description: TODO
 
-    def __init__(self, cfg, num_workers, base_seed, mode="train"):
+    Dataset structure: TODO
+    """
+
+    def __init__(self, cfg, num_workers, base_seed, mode="train", rollout_cfg=None):
         self.data_type = "NS2D"
-        super().__init__(cfg, num_workers, base_seed, mode)
+        super().__init__(cfg, num_workers, base_seed, mode, rollout_cfg)
 
     def _get_dataset_dp(self, data_cfg, mode):
         return _get_all_in_one_path(data_cfg, mode)
@@ -265,17 +273,27 @@ class NS2DDataset(datasetBase):
         vel = torch.cat((vx[:, None], vy[:, None]), dim=1)
 
         # [zero, vel, zero, zero, u, type]
-        data = torch.cat([zero, vel, zero, zero, u, node_type], dim=1)
-        data = data.contiguous()
+        processed_data = torch.cat([zero, vel, zero, zero, u, node_type], dim=1)
+        processed_data = processed_data.contiguous()
 
-        return data
+        # Check if we're in rollout mode with dropped frames and dropped_mask exists
+        if self.rollout and self.dropped_frames:
+            dropped_mask = torch.tensor(data["dropped_mask"][idx], dtype=torch.bool)
+            return processed_data, dropped_mask
+
+        return processed_data
 
 
 class compressible2DDatasetBase(datasetBase):
+    """
+    Dataset Description: TODO
 
-    def __init__(self, cfg, num_workers, base_seed, mode="train", inviscid=False):
+    Dataset structure: TODO
+    """
+
+    def __init__(self, cfg, num_workers, base_seed, mode="train", rollout_cfg=None, inviscid=False):
         self.data_type = "COMPRESSIBLE2D" if not inviscid else "EULER2D"
-        super().__init__(cfg, num_workers, base_seed, mode)
+        super().__init__(cfg, num_workers, base_seed, mode, rollout_cfg)
 
     def _get_dataset_dp(self, data_cfg, mode):
         return _get_nested_path(data_cfg, mode)
@@ -300,22 +318,37 @@ class compressible2DDatasetBase(datasetBase):
         zero = torch.zeros_like(pres)
 
         # [u,v,pres,density,zero,type]
-        cur_data = torch.stack([density, u, v, pres, zero, zero, node_type], dim=1)
-        cur_data = cur_data.contiguous()
+        processed_data = torch.stack([density, u, v, pres, zero, zero, node_type], dim=1)
+        processed_data = processed_data.contiguous()
 
-        return cur_data  # (t, 7, nx, ny)
+        # Check if we're in rollout mode with dropped frames and dropped_mask exists
+        if self.rollout and self.dropped_frames:
+            dropped_mask = torch.tensor(data["dropped_mask"][idx], dtype=torch.bool)
+            return processed_data, dropped_mask
+
+        return processed_data
 
 
 class compressible2DDataset(compressible2DDatasetBase):
+    """
+    Dataset Description: TODO
 
-    def __init__(self, cfg, num_workers, base_seed, mode="train"):
-        super().__init__(cfg, num_workers, base_seed, mode, False)
+    Dataset structure: TODO
+    """
+
+    def __init__(self, cfg, num_workers, base_seed, mode="train", rollout_cfg=None):
+        super().__init__(cfg, num_workers, base_seed, mode, rollout_cfg, False)
 
 
 class Euler2DDataset(compressible2DDatasetBase):
+    """
+    Dataset Description: TODO
 
-    def __init__(self, cfg, num_workers, base_seed, mode="train"):
-        super().__init__(cfg, num_workers, base_seed, mode, True)
+    Dataset structure: TODO
+    """
+
+    def __init__(self, cfg, num_workers, base_seed, mode="train", rollout_cfg=None):
+        super().__init__(cfg, num_workers, base_seed, mode, rollout_cfg, True)
 
 
 DatasetHandler = {
@@ -325,8 +358,8 @@ DatasetHandler = {
 }
 
 
-def all_datasets(cfg, num_workers, base_seed, mode):
+def all_datasets(cfg, num_workers, base_seed, mode, rollout_cfg):
     datasets = {}
     for type in cfg.types.keys():
-        datasets[type] = DatasetHandler[type](cfg, num_workers, base_seed, mode)
+        datasets[type] = DatasetHandler[type](cfg, num_workers, base_seed, mode, rollout_cfg)
     return datasets

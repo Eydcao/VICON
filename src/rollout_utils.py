@@ -80,6 +80,38 @@ def uniform_unpatchify(pred, p_res, h, w):
     return pred
 
 
+def pred_batch(trainer, cfg, full_demo_cond, full_demo_qoi, full_quest_cond, c_mask):
+    """
+    Batched version of pred() - processes multiple trajectories in parallel.
+
+    full_demo_cond: [batch, rollout_demo_num, c, h, w],
+    full_demo_qoi: [batch, rollout_demo_num, c, h, w],
+    full_quest_cond: [batch, 1, c, h, w]
+    c_mask: [batch, c]
+
+    return: [batch, c-1, h, w]
+    """
+    split_scheme = cfg.datasets.split_scheme
+
+    if split_scheme == "split":
+        # -> correct shapes
+        # shape of cond=(batch, pairs=rollout_demo_num+1, c, h_init, w_init)
+        # shape of qoi=(batch, pairs, c, h_end, w_end)
+        # shape of c_mask=(batch, c)
+        cond = torch.cat([full_demo_cond, full_quest_cond], dim=1)  # [batch, pairs, c, h, w]
+        qoi = torch.cat([full_demo_qoi, torch.zeros_like(full_quest_cond)], dim=1)  # [batch, pairs, c, h, w]
+    else:
+        raise ValueError("split_scheme {} not supported in batched rollout".format(split_scheme))
+
+    # get the prediction
+    pred_out, _ = trainer.get_pred((cond, qoi, c_mask))
+    # pred_out: [batch, pairs=rollout_demo_num+1, c-1, h, w]
+
+    # get the last one in dim:pairs, which is the prediction
+    quest_qoi_pred = pred_out[:, -1, ...]  # [batch, c-1, h, w]
+    return quest_qoi_pred
+
+
 def pred(trainer, dataset_type, cfg, full_demo_cond, full_demo_qoi, full_quest_cond, c_mask, tc_rng):
     """
     full_demo_cond: [rollout_demo_num, c, h, w],
@@ -165,30 +197,68 @@ def pred(trainer, dataset_type, cfg, full_demo_cond, full_demo_qoi, full_quest_c
     return out
 
 
+def rollout_batch_trajs(trainer, cfg, results_batch, c_mask_batch, strategy_list):
+    """
+    Batched version of rollout_one_traj - processes multiple trajectories in parallel.
+
+    NOTE: never pass the ground truth to prediction function!
+    results_batch: [batch, t, c, h, w] - trajectories with init frames assigned
+    c_mask_batch: [batch, c] - channel masks for each trajectory
+    strategy_list: list of strategies (same for all trajectories in batch)
+
+    return: results_batch with predictions filled in, [batch, t, c, h, w]
+    """
+    # NOTE assume type channel is static, record it for each trajectory
+    bc_type = results_batch[:, 0, -1, :, :].clone()  # [batch, h, w]
+
+    for strategy in strategy_list:
+        demo_cond_idxs, demo_qoi_idxs, quest_cond_idx, quest_qoi_idx = strategy
+        # Index all trajectories in batch simultaneously
+        demo_cond = results_batch[:, demo_cond_idxs]  # [batch, demo_num, c, h, w]
+        demo_qoi = results_batch[:, demo_qoi_idxs]  # [batch, demo_num, c, h, w]
+        quest_cond = results_batch[:, [quest_cond_idx]]  # [batch, 1, c, h, w]
+
+        out = pred_batch(trainer, cfg, demo_cond, demo_qoi, quest_cond, c_mask_batch)
+        # out: [batch, c-1, h, w]
+
+        results_batch[:, quest_qoi_idx, :-1, :, :] = out  # the last channel is the type channel
+        # set type channel correctly in case this frame is used in the future
+        results_batch[:, quest_qoi_idx, -1, :, :] = bc_type
+
+    return results_batch
+
+
 def rollout_one_traj(trainer, dataset_type, cfg, results, c_mask, tc_rng, strategy_list):
     """
     NOTE: never pass the ground truth to prediction function!
     results: the results sequence with some init frame assigned, [t, c, h, w]
              NOTE while the remaining frames are zero, the type channel is not zero
+    dropped_mask: Optional binary mask indicating dropped frames [t]
     return: the results with full prediction, [t, c, h, w]
     """
-    # generate strategy list
-    # check devices
-    # print("traner device", trainer.device)
-    # print("results device", results.device)
-    # print("c_mask device", c_mask.device)
-
-    # NOTE assume type channle is static, record it
+    # NOTE assume type channel is static, record it
     bc_type = results[0, -1, :, :].clone()
 
     for strategy in strategy_list:
         demo_cond_idxs, demo_qoi_idxs, quest_cond_idx, quest_qoi_idx = strategy
+
+        # Get the demonstration frames and condition frame
         demo_cond = results[demo_cond_idxs]
         demo_qoi = results[demo_qoi_idxs]
         quest_cond = results[[quest_cond_idx]]
+
+        # Assert no NaN values in demo_cond, demo_qoi, quest_cond
+        assert not torch.any(torch.isnan(demo_cond)), "demo_cond has NaN values"
+        assert not torch.any(torch.isnan(demo_qoi)), "demo_qoi has NaN values"
+        assert not torch.any(torch.isnan(quest_cond)), "quest_cond has NaN values"
+
+        # Run the prediction
         out = pred(trainer, dataset_type, cfg, demo_cond, demo_qoi, quest_cond, c_mask, tc_rng)
+
+        # Store the prediction result
         results[quest_qoi_idx, :-1, :, :] = out  # the last channel is the type channel
-        # set it up correctly in case this frame is used in the future
+
+        # Set the type channel correctly for future use of this frame
         results[quest_qoi_idx, -1, :, :] = bc_type
 
     return results

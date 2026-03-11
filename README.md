@@ -1,12 +1,37 @@
 # VICON: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics
 
-This repository contains the official implementation of VICON: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics, published in [Transactions on Machine Learning Research (TMLR)](https://openreview.net/forum?id=6V3YmHULQ3).
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch 2.3+](https://img.shields.io/badge/PyTorch-2.3+-ee4c2c.svg)](https://pytorch.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![arXiv](https://img.shields.io/badge/arXiv-2411.16063-b31b1b.svg)](https://arxiv.org/abs/2411.16063)
 
-[[Paper]](https://openreview.net/forum?id=6V3YmHULQ3) [[arXiv]](https://arxiv.org/abs/2411.16063)
+[[Paper]](https://openreview.net/forum?id=6V3YmHULQ3) | [[arXiv]](https://arxiv.org/abs/2411.16063) | [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Checkpoint-orange)](https://huggingface.co/PLACEHOLDER)
+
+> **VICON: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics Prediction**
+> Published in **Transactions on Machine Learning Research (TMLR)**
 
 ## Updates
 
+- **[Mar 2026]** Pre-trained checkpoints released on HuggingFace!
 - **[Jan 2026]** VICON has been accepted by TMLR! The accepted paper is available on [OpenReview](https://openreview.net/forum?id=6V3YmHULQ3).
+
+## Installation
+
+```bash
+# Clone repository
+git clone https://github.com/[org]/VICON.git
+cd VICON
+
+# Create conda environment
+conda env create -f environment.yml
+conda activate vicon
+```
+
+## Pre-trained Checkpoints
+
+| Model | Dataset | Download |
+|-------|---------|----------|
+| VICON | Combined (All 3 PDEs) | [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Download-orange)](https://huggingface.co/PLACEHOLDER) |
 
 ## Dataset
 
@@ -20,16 +45,37 @@ Refer to [dataset_prepare/README.md](./dataset_prepare/README.md) for details.
 
 ## Usage
 
-We use Hydra for configuration management, allowing flexible parameter modifications via command line or config files. Example:
+We use Hydra for configuration management, allowing flexible parameter modifications via command line or config files.
 
-```sh
+### Training
+
+```bash
 # Train the model with specific configurations
 # Assuming GPUs 0 and 1, enable wandb logging
-# TODO: Define your dataset directories either in script or config file
-CUDA_VISIBLE_DEVICES="0,1" python src/train.py plot=0 board=1 amp=0 dataset_workers=2 multi_gpu=1 datasets.train_batch_size=30 loss.min_ex=5 model.transformer.num_layers=10 model.use_patch_pos_encoding=True model.use_func_pos_encoding=True datasets.types.COMPRESSIBLE2D.folder=$COMPRESSIBLE2D_DIR datasets.types.EULER2D.folder=$EULER2D_DIR datasets.types.NS2D.folder=$NS2D_DIR
+CUDA_VISIBLE_DEVICES="0,1" python src/train.py \
+    plot=0 board=1 amp=0 \
+    dataset_workers=2 multi_gpu=1 \
+    datasets.train_batch_size=30 \
+    loss.min_ex=5 \
+    model.transformer.num_layers=10 \
+    model.use_patch_pos_encoding=True \
+    model.use_func_pos_encoding=True \
+    datasets.types.COMPRESSIBLE2D.folder=$COMPRESSIBLE2D_DIR \
+    datasets.types.EULER2D.folder=$EULER2D_DIR \
+    datasets.types.NS2D.folder=$NS2D_DIR
 ```
 
-Refer to the configs folder for detailed configuration options.
+### Evaluation
+
+```bash
+# Run rollout evaluation
+python src/rollout.py \
+    rollout.ckpt_dir=/path/to/checkpoint/dir \
+    rollout.ckpt_stamp=checkpoint_name \
+    board=0
+```
+
+Refer to the `configs/` folder for detailed configuration options.
 
 ## Motivations
 
@@ -152,15 +198,13 @@ Figure 4: Comparison with state-of-the-art performance. VICON is additionally ev
 ## Citation
 
 ```bibtex
-@article{
-cao2026vicon,
-title={{VICON}: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics Prediction},
-author={Yadi Cao and Yuxuan Liu and Liu Yang and Rose Yu and Hayden Schaeffer and Stanley Osher},
-journal={Transactions on Machine Learning Research},
-issn={2835-8856},
-year={2026},
-url={https://openreview.net/forum?id=6V3YmHULQ3},
-note={}
+@article{cao2026vicon,
+ author = {Cao, Y. and Liu, Y. and Yang, L. and Yu, R. and Schaeffer, H. and Osher, S.},
+ title = {{VICON}: Vision In-Context Operator Networks for Multi-Physics Fluid Dynamics Prediction},
+ journal = {Transactions on Machine Learning Research},
+ year = {2026},
+ issn = {2835-8856},
+ url = {https://openreview.net/forum?id=6V3YmHULQ3}
 }
 ```
 
