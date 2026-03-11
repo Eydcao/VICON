@@ -16,7 +16,7 @@
 
 ```bash
 # Clone repository
-git clone https://github.com/[org]/VICON.git
+git clone https://github.com/Eydcao/VICON.git
 cd VICON
 
 # Create conda environment
