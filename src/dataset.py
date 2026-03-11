@@ -237,9 +237,21 @@ class datasetBase(dp.iter.IterDataPipe):
 
 class NS2DDataset(datasetBase):
     """
-    Dataset Description: TODO
+    PDEArena-Incomp: Incompressible Navier-Stokes Dataset.
 
-    Dataset structure: TODO
+    PDE: ∂_t u + u·∇u = -∇p + μΔu + f,  ∇·u = 0
+    Domain: [0, 32]² × [18, 105], dt = 1.5, resolution 128 × 128
+    Trajectories: 2,496/608/608 (train/valid/test), 56 timesteps each
+    BCs: Velocity (Dirichlet), scalar particle field (Neumann)
+    Features: density (zero), vx, vy, pressure (zero), vorticity (zero), scalar (u), node_type
+
+    Dataset structure:
+        HDF5 file with groups 'train', 'valid', 'test', each containing:
+        - u: [N, T, H, W] scalar particle field
+        - vx: [N, T, H, W] x-velocity
+        - vy: [N, T, H, W] y-velocity
+
+    Reference: Gupta & Brandstetter (2022), PDEArena
     """
 
     def __init__(self, cfg, num_workers, base_seed, mode="train", rollout_cfg=None):
@@ -286,9 +298,24 @@ class NS2DDataset(datasetBase):
 
 class compressible2DDatasetBase(datasetBase):
     """
-    Dataset Description: TODO
+    PDEBench Compressible Navier-Stokes Base Dataset.
 
-    Dataset structure: TODO
+    PDE (Compressible NS):
+        ∂_t ρ + ∇·(ρu) = 0
+        ρ(∂_t u + u·∇u) = -∇p + η∆u + (ζ + η/3)∇(∇·u)
+        ∂_t(ε + ρu²/2) = -∇·[(ε + p + ρu²/2)u - u·σ']
+    Domain: T² × [0, 1], dt = 0.05, resolution 128 × 128
+    BCs: Periodic (torus)
+    Features: density, vx, vy, pressure, vorticity (zero), scalar (zero), node_type
+
+    Dataset structure:
+        HDF5 files (one per trajectory) containing:
+        - Vx: [T, H, W] x-velocity
+        - Vy: [T, H, W] y-velocity
+        - pressure: [T, H, W] pressure field
+        - density: [T, H, W] density field
+
+    Reference: Takamoto et al. (2022), PDEBench
     """
 
     def __init__(self, cfg, num_workers, base_seed, mode="train", rollout_cfg=None, inviscid=False):
@@ -331,9 +358,14 @@ class compressible2DDatasetBase(datasetBase):
 
 class compressible2DDataset(compressible2DDatasetBase):
     """
-    Dataset Description: TODO
+    PDEBench-Comp-HighVis: Compressible Navier-Stokes with High Viscosity.
 
-    Dataset structure: TODO
+    Inherits from compressible2DDatasetBase.
+    Viscosity: Higher values (various combinations of shear and bulk viscosity)
+    Trajectories: 40,000 total, 21 timesteps each
+    Split: 80%/10%/10% (train/valid/test)
+
+    See compressible2DDatasetBase for PDE details and data structure.
     """
 
     def __init__(self, cfg, num_workers, base_seed, mode="train", rollout_cfg=None):
@@ -342,9 +374,15 @@ class compressible2DDataset(compressible2DDatasetBase):
 
 class Euler2DDataset(compressible2DDatasetBase):
     """
-    Dataset Description: TODO
+    PDEBench-Comp-LowVis: Compressible Navier-Stokes with Low Viscosity (Euler).
 
-    Dataset structure: TODO
+    Inherits from compressible2DDatasetBase.
+    Viscosity: Numerically zero (1e-8), essentially inviscid Euler equations
+    Resolution: Raw 512 × 512, downsampled to 128 × 128 via average pooling
+    Trajectories: 4,000 total, 21 timesteps each
+    Split: 80%/10%/10% (train/valid/test)
+
+    See compressible2DDatasetBase for PDE details and data structure.
     """
 
     def __init__(self, cfg, num_workers, base_seed, mode="train", rollout_cfg=None):

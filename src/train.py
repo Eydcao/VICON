@@ -116,7 +116,7 @@ def run_train(cfg):
             or (trainer.train_step % (cfg.plot_freq // 10) == 0 and trainer.train_step <= cfg.plot_freq)
             or (trainer.train_step % (cfg.plot_freq // 10) == 0 and trainer.train_step >= total_steps - cfg.plot_freq)
         ):
-            # NOTE since node bs represent different pde types, we can only plot more than 1 type TODO
+            # Plot each dataset type separately (batch contains mixed PDE types)
             for tmp_type, looper in test_loopers.items():
                 tmp_types, tmp_pairs, tmp_in_idx, tmp_out_idx, _ = next(looper)
                 eval_plot(tmp_types, trainer, tmp_pairs, f"test_{tmp_type}", tmp_in_idx, tmp_out_idx, 0, cfg)
